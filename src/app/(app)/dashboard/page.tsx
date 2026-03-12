@@ -1,45 +1,33 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, createElement } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-interface SessionItem {
-  id: string;
-  title: string;
-  status: string;
-  currentScreen: number;
-  startedAt: string;
-  updatedAt: string;
-  completedAt: string | null;
-  _count: { answers: number };
-}
+import { pdf } from "@react-pdf/renderer";
+import {
+  getSessions,
+  createSession,
+  getAnswerCount,
+  getSession,
+} from "@/lib/storage";
+import CompassPDF from "@/components/pdf/CompassPDF";
+import type { CompassSessionData } from "@/types/compass";
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
   const router = useRouter();
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [sessions, setSessions] = useState<CompassSessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetch("/api/compass/sessions")
-      .then((r) => r.json())
-      .then((d) => {
-        setSessions(d.sessions || []);
-        setLoading(false);
-      });
+    setSessions(getSessions());
+    setLoading(false);
   }, []);
 
-  async function createSession() {
+  function handleCreateSession() {
     setCreating(true);
-    const res = await fetch("/api/compass/sessions", { method: "POST" });
-    const data = await res.json();
-    if (data.session) {
-      router.push(`/compass/${data.session.id}`);
-    }
-    setCreating(false);
+    const session = createSession();
+    router.push(`/compass/${session.id}`);
   }
 
   const inProgress = sessions.filter((s) => s.status === "in_progress");
@@ -48,29 +36,18 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-deep-black px-4 py-8">
       <header className="mx-auto flex max-w-4xl items-center justify-between">
-        <Link href="/dashboard">
+        <Link href="/">
           <h1 className="font-serif text-lg font-bold text-cream">
             THE GOLDEN <span className="text-gold">COMPASS</span>
           </h1>
         </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-cream-muted">
-            {session?.user?.name || session?.user?.email}
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="text-sm text-cream-muted transition-colors hover:text-cream"
-          >
-            Sign out
-          </button>
-        </div>
       </header>
 
       <main className="mx-auto mt-12 max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <h2 className="font-serif text-3xl text-cream">Your Compasses</h2>
           <button
-            onClick={createSession}
+            onClick={handleCreateSession}
             disabled={creating}
             className="rounded-full bg-gold px-6 py-2.5 text-sm font-semibold uppercase tracking-wider text-deep-black transition-all hover:bg-gold-light hover:shadow-[0_0_30px_rgba(201,168,76,0.3)] disabled:opacity-50"
           >
@@ -91,7 +68,7 @@ export default function DashboardPage() {
               You haven&apos;t started a compass yet.
             </p>
             <button
-              onClick={createSession}
+              onClick={handleCreateSession}
               disabled={creating}
               className="rounded-full bg-gold px-8 py-3 text-sm font-semibold uppercase tracking-wider text-deep-black transition-all hover:bg-gold-light hover:shadow-[0_0_30px_rgba(201,168,76,0.3)] disabled:opacity-50"
             >
@@ -131,13 +108,42 @@ export default function DashboardPage() {
   );
 }
 
-function SessionCard({ session: s }: { session: SessionItem }) {
+function SessionCard({ session: s }: { session: CompassSessionData }) {
   const isCompleted = s.status === "completed";
+  const answerCount = getAnswerCount(s.answers);
   const date = new Date(s.updatedAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+
+  async function handleDownloadPDF() {
+    const data = getSession(s.id);
+    if (!data) return;
+
+    const userName = "Golden Compass User";
+    const completedDate = (
+      data.completedAt ? new Date(data.completedAt) : new Date()
+    ).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const element = createElement(CompassPDF, {
+      userName,
+      completedDate,
+      answers: data.answers,
+    }) as React.ReactElement<any>;
+    const blob = await pdf(element).toBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `golden-compass-${s.id.slice(0, 8)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="group rounded-xl border border-white/5 bg-charcoal/30 p-6 transition-all hover:border-gold/20 hover:bg-charcoal/50">
@@ -163,11 +169,11 @@ function SessionCard({ session: s }: { session: SessionItem }) {
             <div className="h-1 w-full overflow-hidden rounded-full bg-white/5">
               <div
                 className="h-full rounded-full bg-gold/60 transition-all"
-                style={{ width: `${Math.max(2, (s._count.answers / 84) * 100)}%` }}
+                style={{ width: `${Math.max(2, (answerCount / 84) * 100)}%` }}
               />
             </div>
             <p className="mt-2 text-xs text-cream-muted">
-              {s._count.answers} answers saved
+              {answerCount} answers saved
             </p>
           </div>
         )}
@@ -178,10 +184,9 @@ function SessionCard({ session: s }: { session: SessionItem }) {
       </Link>
 
       {isCompleted && (
-        <a
-          href={`/api/compass/${s.id}/pdf`}
+        <button
+          onClick={handleDownloadPDF}
           className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gold/20 px-4 py-2 text-xs font-medium text-gold transition-all hover:border-gold/40 hover:bg-gold/5"
-          onClick={(e) => e.stopPropagation()}
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
             <path
@@ -191,7 +196,7 @@ function SessionCard({ session: s }: { session: SessionItem }) {
             />
           </svg>
           Download PDF
-        </a>
+        </button>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { COMPASS_FLOW, getAllScreens } from "@/lib/compass-flow";
+import { updateSession } from "@/lib/storage";
 import type {
   CompassAnswers,
   NavigationDirection,
@@ -139,13 +140,12 @@ export default function CompassEngine({
     if (!canProceed) return;
 
     if (currentIndex >= totalScreens - 1) {
-      // Complete the session
       flushSave(answers);
-      fetch(`/api/compass/${sessionId}/complete`, { method: "POST" }).then(
-        () => {
-          router.push("/dashboard");
-        }
-      );
+      updateSession(sessionId, {
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
+      router.push("/dashboard");
       return;
     }
 

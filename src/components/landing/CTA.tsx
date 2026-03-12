@@ -37,7 +37,7 @@ export default function CTA() {
         </p>
 
         <Link
-          href="/register"
+          href="/dashboard"
           className="mt-10 inline-flex items-center rounded-full bg-gold px-10 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-deep-black transition-all hover:bg-gold-light hover:shadow-[0_0_40px_rgba(201,168,76,0.3)]"
         >
           Begin Your Journey

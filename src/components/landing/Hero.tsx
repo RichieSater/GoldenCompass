@@ -93,28 +93,12 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 1.2 }}
         >
           <Link
-            href="/register"
+            href="/dashboard"
             className="mt-12 inline-flex items-center rounded-full bg-gold px-10 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-deep-black transition-all hover:bg-gold-light hover:shadow-[0_0_40px_rgba(201,168,76,0.3)]"
           >
             Begin Your Journey
           </Link>
         </motion.div>
-
-        {/* Login link */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 1.5 }}
-          className="mt-6 text-sm text-cream-muted"
-        >
-          Already started?{" "}
-          <Link
-            href="/login"
-            className="text-gold transition-colors hover:text-gold-light"
-          >
-            Continue your compass
-          </Link>
-        </motion.p>
       </div>
 
       {/* Scroll indicator */}

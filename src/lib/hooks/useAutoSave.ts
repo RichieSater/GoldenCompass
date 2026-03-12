@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import type { SaveStatus, CompassAnswers } from "@/types/compass";
+import { updateSession } from "@/lib/storage";
 
 interface UseAutoSaveOptions {
   sessionId: string;
@@ -10,44 +11,15 @@ interface UseAutoSaveOptions {
 
 export function useAutoSave({ sessionId, onStatusChange }: UseAutoSaveOptions) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortController = useRef<AbortController | null>(null);
 
   const saveAnswers = useCallback(
-    async (answers: CompassAnswers) => {
-      // Flatten CompassAnswers into array of { screenId, inputKey, answer }
-      const entries: { screenId: string; inputKey: string; answer: string }[] =
-        [];
-      for (const [screenId, inputs] of Object.entries(answers)) {
-        for (const [inputKey, answer] of Object.entries(inputs)) {
-          if (answer) {
-            entries.push({ screenId, inputKey, answer });
-          }
-        }
-      }
-
-      if (entries.length === 0) return;
-
-      // Cancel any in-flight request
-      abortController.current?.abort();
-      abortController.current = new AbortController();
-
+    (answers: CompassAnswers) => {
       onStatusChange("saving");
-
       try {
-        const res = await fetch(`/api/compass/${sessionId}/answers`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers: entries }),
-          signal: abortController.current.signal,
-        });
-
-        if (!res.ok) throw new Error("Save failed");
+        updateSession(sessionId, { answers });
         onStatusChange("saved");
-
-        // Reset to idle after 2 seconds
         setTimeout(() => onStatusChange("idle"), 2000);
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
+      } catch {
         onStatusChange("error");
         setTimeout(() => onStatusChange("idle"), 3000);
       }
@@ -64,13 +36,9 @@ export function useAutoSave({ sessionId, onStatusChange }: UseAutoSaveOptions) {
   );
 
   const savePosition = useCallback(
-    async (currentScreen: number) => {
+    (currentScreen: number) => {
       try {
-        await fetch(`/api/compass/${sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentScreen }),
-        });
+        updateSession(sessionId, { currentScreen });
       } catch {
         // Position save is best-effort
       }
