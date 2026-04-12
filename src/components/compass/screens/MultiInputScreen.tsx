@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import {
+  getScreenListItems,
+  serializeListItems,
+} from "@/lib/list-answer-utils";
 import type { CompassScreen } from "@/types/compass";
 
 interface MultiInputScreenProps {
@@ -14,29 +18,29 @@ export default function MultiInputScreen({
   answers,
   onAnswerChange,
 }: MultiInputScreenProps) {
+  const minItems = screen.minItems ?? 1;
+  const maxItems = screen.maxItems;
+
   const [items, setItems] = useState<string[]>(() => {
-    try {
-      const parsed = answers.items ? JSON.parse(answers.items) : [];
-      return parsed.length > 0 ? parsed : [""];
-    } catch {
-      return [""];
-    }
+    const parsed = getScreenListItems(screen, answers);
+    return parsed.length > 0 ? parsed : [""];
   });
 
   // Ref to track which input to focus after adding
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const pendingFocusIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const focusIndex = pendingFocusIndexRef.current;
     if (focusIndex !== null && inputRefs.current[focusIndex]) {
       inputRefs.current[focusIndex]?.focus();
-      setFocusIndex(null);
+      pendingFocusIndexRef.current = null;
     }
-  }, [focusIndex, items.length]);
+  }, [items.length]);
 
   function persist(newItems: string[]) {
     setItems(newItems);
-    onAnswerChange("items", JSON.stringify(newItems.filter(Boolean)));
+    onAnswerChange("items", serializeListItems(newItems));
   }
 
   function updateItem(index: number, value: string) {
@@ -49,12 +53,12 @@ export default function MultiInputScreen({
     if (items.length <= 1) {
       // Don't remove the last row, just clear it
       persist([""]);
-      setFocusIndex(0);
+      pendingFocusIndexRef.current = 0;
       return;
     }
     const next = items.filter((_, i) => i !== index);
     persist(next);
-    setFocusIndex(Math.min(index, next.length - 1));
+    pendingFocusIndexRef.current = Math.min(index, next.length - 1);
   }
 
   function handleKeyDown(e: React.KeyboardEvent, index: number) {
@@ -64,13 +68,14 @@ export default function MultiInputScreen({
 
       // If current row is empty and it's the last one, don't add another
       if (!items[index].trim() && index === items.length - 1) return;
+      if (maxItems !== undefined && items.length >= maxItems) return;
 
       // Add a new empty row below and focus it
       const next = [...items];
       next.splice(index + 1, 0, "");
       setItems(next);
-      onAnswerChange("items", JSON.stringify(next.filter(Boolean)));
-      setFocusIndex(index + 1);
+      onAnswerChange("items", serializeListItems(next));
+      pendingFocusIndexRef.current = index + 1;
       return;
     }
 
@@ -119,7 +124,13 @@ export default function MultiInputScreen({
       ))}
 
       <p className="pt-1 text-center text-[11px] text-cream-muted/30">
-        Press Enter to add \u00b7 Backspace on empty to remove \u00b7 {"\u2318"}+Enter to continue
+        Press Enter to add
+        {" \u00b7 "}
+        Backspace on empty to remove
+        {" \u00b7 "}
+        {"\u2318"}+Enter to continue
+        {maxItems !== undefined ? ` \u00b7 ${Math.min(items.filter((item) => item.trim().length > 0).length, maxItems)}/${maxItems} items` : ""}
+        {minItems > 1 && maxItems === undefined ? ` \u00b7 at least ${minItems} items` : ""}
       </p>
     </div>
   );

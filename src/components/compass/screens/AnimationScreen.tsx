@@ -1,5 +1,6 @@
 "use client";
 
+import { getScreenListItems, parseStoredListItems } from "@/lib/list-answer-utils";
 import type { AnimationId } from "@/types/compass";
 import BonfireAnimation from "../animations/BonfireAnimation";
 import CompassRoseAnimation from "../animations/CompassRoseAnimation";
@@ -15,13 +16,9 @@ export default function AnimationScreen({ animation, allAnswers }: AnimationScre
   switch (animation) {
     case "bonfire-burn": {
       // bonfire-write is now a multi-input, items stored as JSON array
-      let burdenItems: string[] = [];
-      try {
-        const raw = allAnswers?.["bonfire-write"]?.items || "[]";
-        burdenItems = JSON.parse(raw);
-      } catch {
-        burdenItems = [];
-      }
+      const burdenItems = parseStoredListItems(
+        allAnswers?.["bonfire-write"]?.items
+      );
       return <BonfireAnimation items={burdenItems} />;
     }
     case "compass-rose-spin":
@@ -29,11 +26,16 @@ export default function AnimationScreen({ animation, allAnswers }: AnimationScre
     case "celebration-finale":
       return <CelebrationFinale />;
     case "forgiveness-crossout": {
-      const compassionText = allAnswers?.["past-compassion-box"]?.main || "";
-      const items = compassionText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const items = getScreenListItems(
+        {
+          id: "past-compassion-box",
+          sectionIndex: 2,
+          sectionKey: "past",
+          sectionTitle: "The Past",
+          type: "multi-input",
+        },
+        allAnswers?.["past-compassion-box"]
+      );
       return <ForgivenessAnimation items={items} />;
     }
     default:

@@ -3,6 +3,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { COMPASS_FLOW, getAllScreens } from "@/lib/compass-flow";
+import {
+  getNormalizedListAnswers,
+  getScreenListItems,
+  serializeListItems,
+} from "@/lib/list-answer-utils";
 import { updateSession } from "@/lib/storage";
 import type {
   CompassAnswers,
@@ -29,6 +34,10 @@ export default function CompassEngine({
 }: CompassEngineProps) {
   const router = useRouter();
   const allScreens = useMemo(() => getAllScreens(), []);
+  const screensById = useMemo(
+    () => new Map(allScreens.map((entry) => [entry.id, entry])),
+    [allScreens]
+  );
   const totalScreens = allScreens.length;
 
   const [currentIndex, setCurrentIndex] = useState(
@@ -50,17 +59,45 @@ export default function CompassEngine({
   const screenAnswers = useMemo(() => {
     const current = answers[screen.id] || {};
     if (screen.prefillFrom && Object.keys(current).length === 0) {
-      const source = answers[screen.prefillFrom];
-      if (source) {
-        // For "top-3-goals" → textarea "main", compose from goal1/goal2/goal3
-        const values = Object.values(source).filter(Boolean);
-        if (values.length > 0) {
-          return { main: values.join("\n") };
+      const sourceScreen = screensById.get(screen.prefillFrom);
+      const sourceAnswers = answers[screen.prefillFrom];
+      if (sourceScreen && sourceAnswers) {
+        const items = getScreenListItems(sourceScreen, sourceAnswers);
+        if (items.length > 0) {
+          if (screen.type === "multi-input") {
+            return { items: serializeListItems(items) };
+          }
+
+          if (screen.type === "textarea" || screen.type === "short-text") {
+            return { main: items.join("\n") };
+          }
         }
       }
     }
+
+    if (screen.type === "multi-input") {
+      return getNormalizedListAnswers(screen, current);
+    }
+
     return current;
-  }, [answers, screen.id, screen.prefillFrom]);
+  }, [answers, screen, screensById]);
+
+  const materializedAnswers = useMemo(() => {
+    const persisted = answers[screen.id] || {};
+
+    if (Object.keys(screenAnswers).length === 0) {
+      return answers;
+    }
+
+    if (JSON.stringify(persisted) === JSON.stringify(screenAnswers)) {
+      return answers;
+    }
+
+    return {
+      ...answers,
+      [screen.id]: screenAnswers,
+    };
+  }, [answers, screen.id, screenAnswers]);
 
   // Determine if can proceed
   const canProceed = useMemo(() => {
@@ -93,12 +130,14 @@ export default function CompassEngine({
 
     // Multi-input: check "items" key has at least one item
     if (type === "multi-input") {
-      try {
-        const items = JSON.parse(screenAnswers.items || "[]");
-        return Array.isArray(items) && items.length > 0;
-      } catch {
-        return false;
-      }
+      const items = getScreenListItems(screen, screenAnswers);
+      const minItems = screen.minItems ?? 1;
+      const maxItems = screen.maxItems;
+
+      return (
+        items.length >= minItems &&
+        (maxItems === undefined || items.length <= maxItems)
+      );
     }
 
     // Signature: check "name" and "signature"
@@ -140,7 +179,7 @@ export default function CompassEngine({
     if (!canProceed) return;
 
     if (currentIndex >= totalScreens - 1) {
-      flushSave(answers);
+      flushSave(materializedAnswers);
       updateSession(sessionId, {
         status: "completed",
         completedAt: new Date().toISOString(),
@@ -150,6 +189,10 @@ export default function CompassEngine({
     }
 
     const nextIndex = currentIndex + 1;
+    if (materializedAnswers !== answers) {
+      setAnswers(materializedAnswers);
+      flushSave(materializedAnswers);
+    }
     setDirection("forward");
     setCurrentIndex(nextIndex);
     savePosition(nextIndex);
@@ -158,6 +201,7 @@ export default function CompassEngine({
     currentIndex,
     totalScreens,
     answers,
+    materializedAnswers,
     sessionId,
     flushSave,
     savePosition,
@@ -173,10 +217,10 @@ export default function CompassEngine({
   }, [currentIndex, savePosition]);
 
   const saveAndExit = useCallback(() => {
-    flushSave(answers);
+    flushSave(materializedAnswers);
     savePosition(currentIndex);
     router.push("/dashboard");
-  }, [answers, currentIndex, flushSave, savePosition, router]);
+  }, [currentIndex, flushSave, materializedAnswers, savePosition, router]);
 
   // Determine if current screen type should suppress Enter-to-advance
   // (textareas need Enter for newlines, multi-input needs Enter to add items)

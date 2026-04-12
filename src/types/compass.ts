@@ -53,6 +53,9 @@ export interface CompassScreen {
 
   // For multi-input types
   inputs?: ScreenInput[];
+  minItems?: number;
+  maxItems?: number;
+  legacyListKeys?: string[];
 
   // For checklist type
   checklistItems?: ChecklistItem[];

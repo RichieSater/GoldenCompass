@@ -7,6 +7,10 @@ import {
   Font,
 } from "@react-pdf/renderer";
 import { COMPASS_FLOW, getAllScreens } from "@/lib/compass-flow";
+import {
+  getScreenListItems,
+  serializeListItems,
+} from "@/lib/list-answer-utils";
 import type { CompassAnswers } from "@/types/compass";
 
 // Register fonts - using standard PDF fonts as fallback
@@ -155,6 +159,7 @@ export default function CompassPDF({
   answers,
 }: CompassPDFProps) {
   const allScreens = getAllScreens();
+  const screensById = new Map(allScreens.map((screen) => [screen.id, screen]));
 
   return (
     <Document>
@@ -177,7 +182,22 @@ export default function CompassPDF({
         const qaPairs: { question: string; answer: string }[] = [];
 
         for (const screen of sectionScreens) {
-          const screenAnswers = answers[screen.id];
+          let screenAnswers = answers[screen.id];
+
+          if (!screenAnswers && screen.prefillFrom) {
+            const sourceScreen = screensById.get(screen.prefillFrom);
+            const sourceAnswers = answers[screen.prefillFrom];
+            if (sourceScreen && sourceAnswers) {
+              const items = getScreenListItems(sourceScreen, sourceAnswers);
+              if (items.length > 0) {
+                screenAnswers =
+                  screen.type === "multi-input"
+                    ? { items: serializeListItems(items) }
+                    : { main: items.join("\n") };
+              }
+            }
+          }
+
           if (!screenAnswers) continue;
 
           const question =
@@ -205,18 +225,14 @@ export default function CompassPDF({
               qaPairs.push({ question, answer: parts.join("\n") });
             }
           } else if (screen.type === "multi-input") {
-            try {
-              const items = JSON.parse(screenAnswers.items || "[]");
-              if (items.length > 0) {
-                qaPairs.push({
-                  question,
-                  answer: items
-                    .map((item: string, i: number) => `${i + 1}. ${item}`)
-                    .join("\n"),
-                });
-              }
-            } catch {
-              // skip
+            const items = getScreenListItems(screen, screenAnswers);
+            if (items.length > 0) {
+              qaPairs.push({
+                question,
+                answer: items
+                  .map((item, i) => `${i + 1}. ${item}`)
+                  .join("\n"),
+              });
             }
           } else if (screen.type === "signature") {
             const name = screenAnswers.name;

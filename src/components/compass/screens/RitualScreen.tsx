@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getScreenListItems } from "@/lib/list-answer-utils";
 
 interface RitualScreenProps {
   answers: Record<string, string>;
@@ -14,11 +15,16 @@ export default function RitualScreen({
   onAnswerChange,
 }: RitualScreenProps) {
   // Get items from the box of compassion
-  const compassionText = allAnswers["past-compassion-box"]?.main || "";
-  const items = compassionText
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const items = getScreenListItems(
+    {
+      id: "past-compassion-box",
+      sectionIndex: 2,
+      sectionKey: "past",
+      sectionTitle: "The Past",
+      type: "multi-input",
+    },
+    allAnswers["past-compassion-box"]
+  );
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [forgiven, setForgiven] = useState<Set<number>>(new Set());
