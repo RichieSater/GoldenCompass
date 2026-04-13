@@ -1,27 +1,30 @@
 "use client";
 
-import { useEffect, useState, createElement } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { pdf } from "@react-pdf/renderer";
 import {
-  getSessions,
   createSession,
+  deleteSession,
   getAnswerCount,
   getSession,
+  getSessions,
 } from "@/lib/storage";
 import CompassPDF from "@/components/pdf/CompassPDF";
 import type { CompassSessionData } from "@/types/compass";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [sessions, setSessions] = useState<CompassSessionData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<CompassSessionData[] | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    setSessions(getSessions());
-    setLoading(false);
+    const frame = window.requestAnimationFrame(() => {
+      setSessions(getSessions());
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   function handleCreateSession() {
@@ -30,8 +33,24 @@ export default function DashboardPage() {
     router.push(`/compass/${session.id}`);
   }
 
-  const inProgress = sessions.filter((s) => s.status === "in_progress");
-  const completed = sessions.filter((s) => s.status === "completed");
+  function handleDeleteSession(id: string) {
+    const session = sessions?.find((entry) => entry.id === id);
+    const confirmed = window.confirm(
+      `Delete ${session?.title || "this compass"}? This removes it from this browser and cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    deleteSession(id);
+    setSessions((current) => current?.filter((entry) => entry.id !== id) || []);
+  }
+
+  const inProgress = (sessions || []).filter(
+    (session) => session.status === "in_progress"
+  );
+  const completed = (sessions || []).filter(
+    (session) => session.status === "completed"
+  );
+  const loading = sessions === null;
 
   return (
     <div className="min-h-screen bg-deep-black px-4 py-8">
@@ -83,8 +102,12 @@ export default function DashboardPage() {
                   In Progress
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {inProgress.map((s) => (
-                    <SessionCard key={s.id} session={s} />
+                  {inProgress.map((session) => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      onDelete={handleDeleteSession}
+                    />
                   ))}
                 </div>
               </div>
@@ -95,8 +118,12 @@ export default function DashboardPage() {
                   Completed
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {completed.map((s) => (
-                    <SessionCard key={s.id} session={s} />
+                  {completed.map((session) => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      onDelete={handleDeleteSession}
+                    />
                   ))}
                 </div>
               </div>
@@ -108,17 +135,23 @@ export default function DashboardPage() {
   );
 }
 
-function SessionCard({ session: s }: { session: CompassSessionData }) {
-  const isCompleted = s.status === "completed";
-  const answerCount = getAnswerCount(s.answers);
-  const date = new Date(s.updatedAt).toLocaleDateString("en-US", {
+function SessionCard({
+  session,
+  onDelete,
+}: {
+  session: CompassSessionData;
+  onDelete: (id: string) => void;
+}) {
+  const isCompleted = session.status === "completed";
+  const answerCount = getAnswerCount(session.answers);
+  const date = new Date(session.updatedAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 
   async function handleDownloadPDF() {
-    const data = getSession(s.id);
+    const data = getSession(session.id);
     if (!data) return;
 
     const userName = "Golden Compass User";
@@ -130,27 +163,34 @@ function SessionCard({ session: s }: { session: CompassSessionData }) {
       year: "numeric",
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const element = createElement(CompassPDF, {
-      userName,
-      completedDate,
-      answers: data.answers,
-    }) as React.ReactElement<any>;
+    const element = (
+      <CompassPDF
+        userName={userName}
+        completedDate={completedDate}
+        answers={data.answers}
+      />
+    );
     const blob = await pdf(element).toBlob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `golden-compass-${s.id.slice(0, 8)}.pdf`;
+    a.download = `golden-compass-${session.id.slice(0, 8)}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
+  function handleDeleteClick(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete(session.id);
+  }
+
   return (
     <div className="group rounded-xl border border-white/5 bg-charcoal/30 p-6 transition-all hover:border-gold/20 hover:bg-charcoal/50">
-      <Link href={`/compass/${s.id}`}>
+      <Link href={`/compass/${session.id}`}>
         <div className="flex items-start justify-between">
           <div>
-            <h4 className="font-serif text-lg text-cream">{s.title}</h4>
+            <h4 className="font-serif text-lg text-cream">{session.title}</h4>
             <p className="mt-1 text-sm text-cream-muted">Last updated {date}</p>
           </div>
           <span
@@ -183,21 +223,38 @@ function SessionCard({ session: s }: { session: CompassSessionData }) {
         </div>
       </Link>
 
-      {isCompleted && (
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {isCompleted && (
+          <button
+            onClick={handleDownloadPDF}
+            className="inline-flex items-center gap-2 rounded-lg border border-gold/20 px-4 py-2 text-xs font-medium text-gold transition-all hover:border-gold/40 hover:bg-gold/5"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Download PDF
+          </button>
+        )}
+
         <button
-          onClick={handleDownloadPDF}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gold/20 px-4 py-2 text-xs font-medium text-gold transition-all hover:border-gold/40 hover:bg-gold/5"
+          type="button"
+          onClick={handleDeleteClick}
+          className="inline-flex items-center gap-2 rounded-lg border border-red-400/15 px-4 py-2 text-xs font-medium text-red-300/90 transition-all hover:border-red-400/35 hover:bg-red-500/5"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
             <path
               fillRule="evenodd"
-              d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+              d="M6 4V3a2 2 0 012-2h4a2 2 0 012 2v1h3a1 1 0 110 2h-1v10a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h3zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V3zm-1 4a1 1 0 112 0v7a1 1 0 11-2 0V7zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V7z"
               clipRule="evenodd"
             />
           </svg>
-          Download PDF
+          Delete
         </button>
-      )}
+      </div>
     </div>
   );
 }

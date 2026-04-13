@@ -28,6 +28,12 @@ export default function NavigationControls({
     screenType === "textarea" ||
     screenType === "multi-textarea" ||
     screenType === "multi-input";
+  const keyboardHint =
+    screenType === "multi-input"
+      ? "Enter adds item · ⌘+Enter continues"
+      : needsCmdEnter
+        ? "⌘+Enter continues"
+        : "Press Enter ↵";
 
   return (
     <div className="shrink-0 border-t border-white/5 bg-deep-black/80 px-6 py-4 backdrop-blur-sm">
@@ -52,7 +58,7 @@ export default function NavigationControls({
         <div className="flex items-center gap-2">
           {!isInterstitialOrAnimation && (
             <span className="text-xs text-cream-muted/40">
-              {needsCmdEnter ? "⌘+Enter ↵" : "Press Enter ↵"}
+              {keyboardHint}
             </span>
           )}
           <button

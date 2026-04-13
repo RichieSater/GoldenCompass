@@ -9,20 +9,26 @@ import type { CompassSessionData } from "@/types/compass";
 export default function CompassSessionPage() {
   const router = useRouter();
   const params = useParams<{ sessionId: string }>();
-  const [session, setSession] = useState<CompassSessionData | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [session, setSession] = useState<CompassSessionData | null | undefined>(
+    undefined
+  );
 
   useEffect(() => {
-    const data = getSession(params.sessionId);
-    if (!data) {
-      router.replace("/dashboard");
-    } else {
+    const frame = window.requestAnimationFrame(() => {
+      const data = getSession(params.sessionId);
+      if (!data) {
+        router.replace("/dashboard");
+        setSession(null);
+        return;
+      }
+
       setSession(data);
-    }
-    setChecked(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [params.sessionId, router]);
 
-  if (!checked || !session) {
+  if (session === undefined || session === null) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center bg-deep-black">
         <div className="flex flex-col items-center gap-6">

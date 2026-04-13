@@ -1048,9 +1048,12 @@ const goldenPathScreens: CompassScreen[] = [
     sectionIndex: 7,
     sectionKey: "golden-path",
     sectionTitle: "The Golden Path",
-    type: "textarea",
+    type: "multi-input",
     headline: "A \u2014 Where Are You Now",
     questionText: "Summarise in three lines where you are at today",
+    placeholder: "Add a point about where you are today...",
+    minItems: 3,
+    maxItems: 3,
     isRequired: true,
   },
   {
